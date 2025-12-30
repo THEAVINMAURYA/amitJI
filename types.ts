@@ -1,6 +1,42 @@
 
-export enum TransactionType { INCOME = 'income', EXPENSE = 'expense' }
-export enum AccountType { BANK = 'bank', LOAN = 'loan', CASH = 'cash' }
+export enum TransactionType { 
+  INCOME = 'income', 
+  EXPENSE = 'expense', 
+  PURCHASE = 'purchase', 
+  SALE = 'sale' 
+}
+
+export enum AccountType { 
+  BANK = 'bank', 
+  LOAN = 'loan', 
+  CASH = 'cash' 
+}
+
+export enum PartyType { 
+  VENDOR = 'vendor', 
+  CUSTOMER = 'customer' 
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  unit: string;
+  purchasePrice: number;
+  salePrice: number;
+  stock: number;
+  minStock: number;
+}
+
+export interface Party {
+  id: string;
+  name: string;
+  type: PartyType;
+  phone: string;
+  email: string;
+  address?: string;
+  openingBalance: number; // Positive = Receivable, Negative = Payable
+  currentBalance: number;
+}
 
 export interface Transaction {
   id: string;
@@ -8,9 +44,11 @@ export interface Transaction {
   date: string;
   description: string;
   category: string;
-  account: string; // Account ID
+  account?: string; 
+  partyId?: string; 
   amount: number;
   notes: string;
+  inventoryItems?: { itemId: string, qty: number, price: number }[];
 }
 
 export interface Account {
@@ -30,14 +68,6 @@ export interface Budget {
   limit: number;
 }
 
-export interface Goal {
-  id: string;
-  name: string;
-  target: number;
-  current: number;
-  deadline?: string;
-}
-
 export interface InvestmentTrade {
   id: string;
   date: string;
@@ -50,13 +80,21 @@ export interface InvestmentTrade {
 export interface Investment {
   id: string;
   name: string;
-  assetType: 'Stock' | 'MF' | 'Gold' | 'Crypto' | 'FD' | 'Real Estate' | 'Other';
+  assetType: 'Stock' | 'MF' | 'Gold' | 'Crypto' | 'Real Estate' | 'FD' | 'Other';
   qty: number;
   avgBuyPrice: number;
   currPrice: number;
   history: InvestmentTrade[];
   status: 'active' | 'closed';
   totalRealizedPL: number;
+}
+
+export interface JournalEntry {
+  id: string;
+  date: string;
+  title: string;
+  content: string;
+  photos: string[];
 }
 
 export interface CredentialItem {
@@ -73,12 +111,11 @@ export interface Credential {
   items: CredentialItem[];
 }
 
-export interface JournalEntry {
+export interface Goal {
   id: string;
-  date: string;
-  title: string;
-  content: string;
-  photos: string[]; // Base64 strings
+  name: string;
+  target: number;
+  current: number;
 }
 
 export interface AppData {
@@ -90,6 +127,8 @@ export interface AppData {
   };
   transactions: Transaction[];
   accounts: Account[];
+  parties: Party[];
+  inventory: InventoryItem[];
   credentials: Credential[];
   categories: { income: string[]; expense: string[] };
   journal: JournalEntry[];
