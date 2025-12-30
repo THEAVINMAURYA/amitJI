@@ -14,6 +14,7 @@ import GoalsPage from './pages/GoalsPage';
 import BudgetPage from './pages/BudgetPage';
 import CalendarPage from './pages/CalendarPage';
 import CategoriesPage from './pages/CategoriesPage';
+import ReportsPage from './pages/ReportsPage';
 
 const INITIAL_DATA: AppData = {
   auth: { userId: '', password: '' },
@@ -79,7 +80,7 @@ const cryptoUtils = {
       const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
       return new TextDecoder().decode(decrypted);
     } catch (e) {
-      throw new Error("Decryption failed. Data corrupted or incorrect passphrase.");
+      throw new Error("Decryption failed.");
     }
   }
 };
@@ -93,6 +94,8 @@ const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [isImportUnlockOpen, setIsImportUnlockOpen] = useState(false);
+  const [pendingImportData, setPendingImportData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -165,6 +168,7 @@ const App: React.FC = () => {
       version: "1.0",
       timestamp: new Date().toISOString(),
       owner: data.auth.userId,
+      syncId: data.sync.syncId, // To verify on import
       payload: data
     };
     const blob = new Blob([JSON.stringify(exportPackage, null, 2)], { type: 'application/json' });
@@ -174,7 +178,7 @@ const App: React.FC = () => {
     link.download = `AVIN_DATA_${data.auth.userId}_${new Date().toISOString().split('T')[0]}.avindata`;
     link.click();
     URL.revokeObjectURL(url);
-    showToast('Unique Data File Exported Successfully');
+    showToast('Unique Data File Exported');
   };
 
   const handleImportVault = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,18 +188,31 @@ const App: React.FC = () => {
     reader.onload = (event) => {
       try {
         const imported = JSON.parse(event.target?.result as string);
-        const appData = imported.payload || imported; // Handle legacy or new format
-        if (!appData.transactions || !appData.accounts || !appData.auth) {
-          throw new Error("Invalid AVIN format");
-        }
-        persist(appData);
-        showToast('System Restored from Data File');
+        setPendingImportData(imported);
+        setIsImportUnlockOpen(true);
       } catch (err) {
         showToast('Error: Invalid AVIN Data File');
       }
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleVerifyImport = async (uid: string, pass: string) => {
+    if (!pendingImportData) return;
+    const derivedId = await cryptoUtils.hash(uid + pass);
+    const appData = pendingImportData.payload || pendingImportData;
+    
+    // Verify if the provided credentials match the imported data context
+    if (appData.sync?.syncId === derivedId || pendingImportData.syncId === derivedId) {
+      persist(appData);
+      setIsLoggedIn(true);
+      setIsImportUnlockOpen(false);
+      setPendingImportData(null);
+      showToast('Vault Restored & Verified');
+    } else {
+      showToast('Invalid ID or Secret Key for this Vault');
+    }
   };
 
   const handleAuthorize = async (uid: string, pass: string) => {
@@ -235,6 +252,7 @@ const App: React.FC = () => {
       case 'budget': return <BudgetPage {...props} />;
       case 'calendar': return <CalendarPage {...props} />;
       case 'categories': return <CategoriesPage {...props} />;
+      case 'reports': return <ReportsPage {...props} />;
       default: return <Dashboard data={data} onNavigate={setCurrentPage} />;
     }
   };
@@ -309,6 +327,7 @@ const App: React.FC = () => {
             {[
               { id: 'dashboard', label: 'Dashboard', icon: 'fa-house' },
               { id: 'ledger', label: 'Ledger', icon: 'fa-list-check' },
+              { id: 'reports', label: 'Reports', icon: 'fa-chart-column' },
               { id: 'calendar', label: 'Calendar', icon: 'fa-calendar-days' },
               { id: 'accounts', label: 'Accounts', icon: 'fa-building-columns' },
               { id: 'portfolio', label: 'Portfolio', icon: 'fa-chart-pie' },
@@ -394,6 +413,7 @@ const App: React.FC = () => {
                       <p className="text-[11px] font-black uppercase tracking-widest text-slate-900 mb-1">Import .avindata</p>
                       <p className="text-[9px] font-bold uppercase text-slate-400">Restore Unique File</p>
                    </button>
+                   <input ref={fileInputRef} type="file" accept=".avindata,.json" onChange={handleImportVault} className="hidden" />
                 </div>
                 <p className="mt-6 text-center text-[9px] font-black text-slate-300 uppercase tracking-widest px-8 leading-relaxed">
                   The .avindata file is your private digital asset. It contains your entire AVIN MAURYA ecosystem in a single, portable package.
@@ -401,6 +421,27 @@ const App: React.FC = () => {
              </div>
           </div>
         </div>
+      </Modal>
+
+      <Modal title="Unlock Data File" isOpen={isImportUnlockOpen} onClose={() => { setIsImportUnlockOpen(false); setPendingImportData(null); }}>
+         <div className="text-center space-y-6">
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto">
+               <i className="fas fa-lock"></i>
+            </div>
+            <h3 className="text-xl font-black text-slate-900">Security Verification Required</h3>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Enter the credentials associated with this vault to unlock it.</p>
+            <form onSubmit={(e:any) => { e.preventDefault(); handleVerifyImport(e.target.uid.value, e.target.pass.value); }} className="space-y-4 text-left">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Identity ID</label>
+                  <input name="uid" type="text" className="w-full px-5 py-4 bg-slate-50 rounded-2xl border-0 font-bold" required />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Secret Key</label>
+                  <input name="pass" type="password" className="w-full px-5 py-4 bg-slate-50 rounded-2xl border-0 font-bold" required />
+                </div>
+                <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-lg shadow-indigo-100">Unlock & Import</button>
+            </form>
+         </div>
       </Modal>
 
       {toast && (
